@@ -123,13 +123,30 @@ class ViewController: UIViewController {
                 camera.setPreferredInputSource(frontSource)
             }
         }
-        if let mic = devices.compactMap({ $0 as? IVSMicrophone }).first {
-            streams.append(IVSLocalStageStream(device: mic))
-        }
+        //        if let mic = devices.compactMap({ $0 as? IVSMicrophone }).first {
+        //            streams.append(IVSLocalStageStream(device: mic))
+        //        }
+        let audioSource = deviceDiscovery.createAudioSource(withName: "AudioSource")
+        let audioStream = IVSLocalStageStream(device: audioSource)
+        streams.append(audioStream)
+        self.audioSource = audioSource
+        
         participants[0].streams = streams
         participantsChanged(index: 0, changeType: .updated)
+        
+        let audioOutput = AVCaptureAudioDataOutput()
+        audioOutput.setSampleBufferDelegate(self, queue: .main)
+        audioSession.addOutputWithNoConnections(audioOutput)
+        let audioInput = try! AVCaptureDeviceInput(device: AVCaptureDevice.default(for: .audio)!)
+        audioSession.addInputWithNoConnections(audioInput)
+        let connection = AVCaptureConnection(inputPorts: audioInput.ports, output: audioOutput)
+        audioSession.addConnection(connection)
+        audioSession.startRunning()
     }
-
+    
+    let audioSession = AVCaptureSession()
+    var audioSource: IVSCustomAudioSource? = nil
+    
     private func participantsChanged(index: Int, changeType: ChangeType) {
         // UICollectionView automatically clears itself out when it gets detached from it's
         // superview it seems (which for us happens when the VC is dismissed).
@@ -341,5 +358,11 @@ extension IVSStageConnectionState {
         case .connected: return "Connected"
         @unknown default: fatalError()
         }
+    }
+}
+
+extension ViewController: AVCaptureAudioDataOutputSampleBufferDelegate {
+    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        audioSource?.onSampleBuffer(sampleBuffer)
     }
 }
